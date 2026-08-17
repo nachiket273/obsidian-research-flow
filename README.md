@@ -26,7 +26,7 @@ The central idea is simple:
 
 ## Current Status
 
-**Version: `1.0.0-alpha`**
+**Version: `0.9.0`**
 
 ResearchFlow is an actively developed alpha. The current implementation
 combines the original foundation with the v0.2--v1.0 roadmap features.
