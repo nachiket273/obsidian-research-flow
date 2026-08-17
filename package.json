@@ -1,0 +1,30 @@
+{
+  "name": "obsidian-research-flow",
+  "version": "1.0.0",
+  "description": "A Markdown-first research and project operating system for Obsidian.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs development",
+    "build": "tsc --noEmit && node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "research",
+    "research-management",
+    "project-management",
+    "knowledge-management",
+    "productivity",
+    "tasks",
+    "career",
+    "reading"
+  ],
+  "author": "Nachiket Tanksale",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.13.1",
+    "typescript": "^5.9.3"
+  }
+}
