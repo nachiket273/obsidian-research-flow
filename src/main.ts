@@ -16,7 +16,7 @@ import {
 import type { SettingDefinitionItem } from "obsidian";
 
 const VIEW_TYPE_RESEARCH_FLOW = "research-flow-home";
-const RF_VERSION = "0.9.0";
+const RF_VERSION = "0.9.2";
 const STALE_DAYS = 14;
 
 interface ResearchFlowSettings {
@@ -410,7 +410,7 @@ export default class ResearchFlowPlugin extends Plugin {
 	}
 
 	async createProject(): Promise<void> {
-		new CreateProjectModal(this.app, async (name, domain, kind, priority, deadline) => {
+		const modal = new CreateProjectModal(this.app, async (name, domain, kind, priority, deadline) => {
 			const safeName = sanitizeFileName(name);
 			if (!safeName) { new Notice("Project name cannot be empty."); return; }
 			const path = normalizePath(`${this.settings.projectsFolder}/${safeName}.md`);
@@ -421,10 +421,11 @@ export default class ResearchFlowPlugin extends Plugin {
 			await this.syncProject(name);
 			await this.app.workspace.getLeaf(true).openFile(file);
 		});
+		modal.open();
 	}
 
 	async createResearchIdea(): Promise<void> {
-		new CreateIdeaModal(this.app, async (name, domain, kind, priority) => {
+		const modal = new CreateIdeaModal(this.app, async (name, domain, kind, priority) => {
 			const safeName = sanitizeFileName(name);
 			if (!safeName) { new Notice("Idea name cannot be empty."); return; }
 			const path = normalizePath(`${this.settings.ideasFolder}/${safeName}.md`);
@@ -434,11 +435,12 @@ export default class ResearchFlowPlugin extends Plugin {
 			new Notice(`Created research idea: ${name}`);
 			await this.app.workspace.getLeaf(true).openFile(file);
 		});
+		modal.open();
 	}
 
 	async createTask(): Promise<void> {
 		const projects = (await this.getData()).projects.map((p) => p.name).sort((a, b) => a.localeCompare(b));
-		new CreateTaskModal(this.app, projects, async (name, project, workDate, dueDate, priority) => {
+		const modal = new CreateTaskModal(this.app, projects, async (name, project, workDate, dueDate, priority) => {
 			const safeName = sanitizeFileName(name);
 			if (!safeName) { new Notice("Task name cannot be empty."); return; }
 			const path = normalizePath(`${this.settings.tasksFolder}/${safeName}.md`);
@@ -452,11 +454,12 @@ export default class ResearchFlowPlugin extends Plugin {
 			new Notice(`Created task: ${name}`);
 			await this.app.workspace.getLeaf(true).openFile(file);
 		});
+		modal.open();
 	}
 
 	async createReading(): Promise<void> {
 		const projects = (await this.getData()).projects.map((p) => p.name).sort();
-		new CreateReadingModal(this.app, projects, async (name, url, type, project) => {
+		const modal = new CreateReadingModal(this.app, projects, async (name, url, type, project) => {
 			const safeName = sanitizeFileName(name);
 			if (!safeName) { new Notice("Reading title cannot be empty."); return; }
 			const path = normalizePath(`${this.settings.readingFolder}/${safeName}.md`);
@@ -466,11 +469,12 @@ export default class ResearchFlowPlugin extends Plugin {
 			new Notice(`Added reading: ${name}`);
 			await this.app.workspace.getLeaf(true).openFile(file);
 		});
+		modal.open();
 	}
 
 	async createCareerOpportunity(): Promise<void> {
 		const projects = (await this.getData()).projects.map((p) => p.name).sort();
-		new CreateCareerModal(this.app, projects, async (company, role, deadline, match, project) => {
+		const modal = new CreateCareerModal(this.app, projects, async (company, role, deadline, match, project) => {
 			const name = sanitizeFileName(`${company} - ${role}`);
 			if (!name) { new Notice("Company and role are required."); return; }
 			const path = normalizePath(`${this.settings.careerFolder}/${name}.md`);
@@ -480,6 +484,7 @@ export default class ResearchFlowPlugin extends Plugin {
 			new Notice(`Added opportunity: ${company} — ${role}`);
 			await this.app.workspace.getLeaf(true).openFile(file);
 		});
+		modal.open();
 	}
 
 	async openDailyNote(date: string = today()): Promise<void> {
@@ -1003,8 +1008,27 @@ function selectField(parent: HTMLElement, label: string, values: string[]): HTML
 
 function modalButtons(modal: Modal, parent: HTMLElement, submit: () => Promise<void>): void {
 	const row = parent.createDiv({ cls: "research-flow-modal-buttons" });
-	row.createEl("button", { text: "Cancel" }).addEventListener("click", () => modal.close());
-	row.createEl("button", { text: "Create", cls: "mod-cta" }).addEventListener("click", () => void submit());
+	const cancel = row.createEl("button", { text: "Cancel" });
+	cancel.addEventListener("click", () => modal.close());
+
+	const create = row.createEl("button", {
+		text: "Create",
+		cls: "mod-cta",
+	});
+
+	create.addEventListener("click", () => {
+		if (create.disabled) return;
+		create.disabled = true;
+
+		void submit()
+			.catch((error: unknown) => {
+				const message = error instanceof Error ? error.message : String(error);
+				new Notice(`ResearchFlow: ${message}`);
+			})
+			.finally(() => {
+				create.disabled = false;
+			});
+	});
 }
 
 function frontmatterString(value: unknown): string | undefined {

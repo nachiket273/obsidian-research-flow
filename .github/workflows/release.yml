@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const tag = process.env.GITHUB_REF_NAME;
+          const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+          if (manifest.version !== tag) {
+            throw new Error(`manifest.json version ${manifest.version} does not match tag ${tag}`);
+          }
+          if (manifest.id !== "research-flow") {
+            throw new Error(`Unexpected plugin id: ${manifest.id}`);
+          }
+          NODE
+
+      - name: Verify release files
+        run: |
+          test -s main.js
+          test -s styles.css
+          test -s manifest.json
+
+      - name: Attest main.js
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: main.js
+
+      - name: Attest styles.css
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: styles.css
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME"             main.js             manifest.json             styles.css             --title "ResearchFlow $GITHUB_REF_NAME"             --generate-notes
