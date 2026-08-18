@@ -1,5 +1,11 @@
 # ResearchFlow
 
+[![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22research-flow%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json)](https://community.obsidian.md/plugins/research-flow)
+
+[**Install ResearchFlow from the Community Plugins**](https://community.obsidian.md/plugins/research-flow)
+
+> A Markdown-first research and project operating system connecting ideas, projects, tasks, daily work, reading, and career opportunities.
+
 **ResearchFlow** is a Markdown-first research and project operating
 system for [Obsidian](https://obsidian.md/).
 
