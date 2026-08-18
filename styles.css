@@ -693,7 +693,7 @@
    ------------------------------------------------------------ */
 
 .research-flow-hidden {
-	display: none !important;
+	display: none;
 }
 
 .research-flow-muted {
@@ -710,4 +710,150 @@
 
 .research-flow-success {
 	color: var(--rf-green);
+}
+
+/* ------------------------------------------------------------
+   ResearchFlow runtime / form controls
+   ------------------------------------------------------------ */
+
+.research-flow-home {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 32px 36px 60px;
+}
+
+.research-flow-action-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 12px;
+	border: 1px solid var(--rf-border);
+	border-radius: var(--rf-small-radius);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 0.85rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition:
+		background-color 120ms ease,
+		border-color 120ms ease,
+		transform 120ms ease;
+}
+
+.research-flow-action-button:hover {
+	background: var(--rf-surface-hover);
+	border-color: var(--rf-border-hover);
+}
+
+.research-flow-action-button:active {
+	transform: translateY(1px);
+}
+
+.research-flow-action-icon,
+.research-flow-section-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.research-flow-section-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 28px;
+	margin-bottom: 12px;
+}
+
+.research-flow-section-title {
+	margin: 0;
+	font-size: 1.15rem;
+	font-weight: 650;
+	letter-spacing: -0.015em;
+}
+
+.research-flow-progress-fill {
+	width: var(--research-flow-progress, 0%);
+	height: 100%;
+	border-radius: inherit;
+	background: var(--interactive-accent);
+	transition: width 250ms ease;
+}
+
+.research-flow-form-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 12px;
+}
+
+.research-flow-form-label {
+	color: var(--text-muted);
+	font-size: 0.82rem;
+	font-weight: 600;
+}
+
+.research-flow-form-control {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.research-flow-modal-buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 18px;
+}
+
+.research-flow-list-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 0;
+	border-bottom: 1px solid var(--rf-border);
+}
+
+.research-flow-list-row:last-child {
+	border-bottom: 0;
+}
+
+.research-flow-task-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 0;
+	border-bottom: 1px solid var(--rf-border);
+}
+
+.research-flow-task-row:last-child {
+	border-bottom: 0;
+}
+
+.research-flow-info {
+	margin-top: 12px;
+	padding: 14px;
+	border: 1px solid var(--rf-border);
+	border-radius: var(--rf-radius);
+	background: var(--background-secondary);
+	color: var(--rf-muted);
+	font-size: 0.82rem;
+}
+
+.research-flow-file-input {
+	display: none;
+}
+
+.research-flow-project-card {
+	cursor: default;
+}
+
+@media (max-width: 800px) {
+	.research-flow-home {
+		padding: 24px 20px 48px;
+	}
+}
+
+@media (max-width: 500px) {
+	.research-flow-home {
+		padding: 20px 14px 40px;
+	}
 }

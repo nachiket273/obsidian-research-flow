@@ -7,12 +7,16 @@ import {
 	PluginSettingTab,
 	Setting,
 	TFile,
+	TFolder,
 	WorkspaceLeaf,
 	normalizePath,
+	setIcon,
 } from "obsidian";
 
+import type { SettingDefinitionItem } from "obsidian";
+
 const VIEW_TYPE_RESEARCH_FLOW = "research-flow-home";
-const RF_VERSION = "1.0.0-alpha";
+const RF_VERSION = "0.9.0";
 const STALE_DAYS = 14;
 
 interface ResearchFlowSettings {
@@ -143,7 +147,6 @@ export default class ResearchFlowPlugin extends Plugin {
 		this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
 		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.scheduleRefresh()));
 
-		console.log(`ResearchFlow ${RF_VERSION} loaded`);
 	}
 
 	onunload(): void {
@@ -221,8 +224,56 @@ export default class ResearchFlowPlugin extends Plugin {
 		return file.path.startsWith(prefix);
 	}
 
+	getManagedMarkdownFiles(): TFile[] {
+		const files: TFile[] = [];
+		const seen = new Set<string>();
+		const folders = [
+			this.settings.projectsFolder,
+			this.settings.ideasFolder,
+			this.settings.tasksFolder,
+			this.settings.careerFolder,
+			this.settings.readingFolder,
+			this.settings.dailyFolder,
+		];
+
+		const visit = (folder: TFolder): void => {
+			for (const child of folder.children) {
+				if (child instanceof TFile && child.extension === "md") {
+					if (!seen.has(child.path)) {
+						seen.add(child.path);
+						files.push(child);
+					}
+				} else if (child instanceof TFolder) {
+					visit(child);
+				}
+			}
+		};
+
+		for (const folderPath of folders) {
+			const folder = this.app.vault.getAbstractFileByPath(normalizePath(folderPath));
+			if (folder instanceof TFolder) visit(folder);
+		}
+
+		return files;
+	}
+
+	getManagedFilesInFolder(folderPath: string): TFile[] {
+		const root = this.app.vault.getAbstractFileByPath(normalizePath(folderPath));
+		if (!(root instanceof TFolder)) return [];
+
+		const files: TFile[] = [];
+		const visit = (folder: TFolder): void => {
+			for (const child of folder.children) {
+				if (child instanceof TFile && child.extension === "md") files.push(child);
+				else if (child instanceof TFolder) visit(child);
+			}
+		};
+		visit(root);
+		return files;
+	}
+
 	async getData(): Promise<ResearchFlowData> {
-		const files = this.app.vault.getMarkdownFiles();
+		const files = this.getManagedMarkdownFiles();
 		const projects: Project[] = [];
 		const tasks: Task[] = [];
 		const readings: ReadingItem[] = [];
@@ -452,7 +503,7 @@ export default class ResearchFlowPlugin extends Plugin {
 
 	async syncDailyNote(date: string): Promise<void> {
 		const daily = await this.ensureDailyNote(date);
-		const files = this.app.vault.getMarkdownFiles();
+		const files = this.getManagedFilesInFolder(this.settings.tasksFolder);
 		const rows: string[] = [];
 		for (const file of files) {
 			const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
@@ -506,7 +557,7 @@ export default class ResearchFlowPlugin extends Plugin {
 		if (!clean) return;
 		const projectFile = this.app.metadataCache.getFirstLinkpathDest(clean, "");
 		if (!(projectFile instanceof TFile)) return;
-		const tasks = this.app.vault.getMarkdownFiles().filter((file) => {
+		const tasks = this.getManagedFilesInFolder(this.settings.tasksFolder).filter((file) => {
 			const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
 			return String(fm?.type ?? "") === "task" && normalizeProjectName(frontmatterString(fm?.project)) === clean;
 		});
@@ -539,13 +590,22 @@ export default class ResearchFlowPlugin extends Plugin {
 	}
 
 	async importCareerCSV(): Promise<void> {
-		const input = document.createElement("input");
-		input.type = "file";
+		const input = this.app.workspace.containerEl.createEl("input", {
+			type: "file",
+			cls: "research-flow-file-input",
+		});
 		input.accept = ".csv,text/csv";
-		input.onchange = () => {
-			const file = input.files?.[0];
-			if (file) void this.processCareerCSV(file);
-		};
+		input.hide();
+
+		input.addEventListener("change", () => {
+			const file = input.files?.item(0);
+			if (!file) {
+				input.remove();
+				return;
+			}
+			void this.processCareerCSV(file).finally(() => input.remove());
+		});
+
 		input.click();
 	}
 
@@ -574,7 +634,7 @@ export default class ResearchFlowPlugin extends Plugin {
 	async generateWeeklySummary(): Promise<void> {
 		const end = new Date();
 		const start = new Date(end.getTime() - 6 * 86400000);
-		const files = this.app.vault.getMarkdownFiles().filter((f) => this.isInFolder(f, this.settings.dailyFolder));
+		const files = this.getManagedFilesInFolder(this.settings.dailyFolder);
 		const relevant: string[] = [];
 		for (const file of files) {
 			const d = parseDate(file.basename);
@@ -598,14 +658,12 @@ export default class ResearchFlowPlugin extends Plugin {
 			if (task.project && !projectNames.has(task.project)) problems.push(`Task ${task.name}: missing project ${task.project}`);
 			if (!task.workDate) problems.push(`Task ${task.name}: missing work_date`);
 		}
-		const dailyFiles = this.app.vault.getMarkdownFiles().filter((f) => this.isInFolder(f, this.settings.dailyFolder));
 		for (const project of data.projects) {
 			if (!project.file.path) problems.push(`Project ${project.name}: invalid path`);
 		}
 		if (!problems.length) new Notice("ResearchFlow validation passed.");
 		else {
-			new Notice(`${problems.length} relationship issue(s) found. See console.`);
-			console.warn("ResearchFlow validation", problems, dailyFiles.length);
+			new Notice(`${problems.length} relationship issue(s) found. Check the affected notes.`);
 		}
 	}
 }
@@ -683,10 +741,19 @@ class ResearchFlowHomeView extends ItemView {
 	}
 
 	button(parent: HTMLElement, text: string, icon: string, callback: () => void): void {
-		const b = parent.createEl("button", { text });
+		const b = parent.createEl("button", { cls: "research-flow-action-button" });
+		const iconEl = b.createSpan({ cls: "research-flow-action-icon" });
+		setIcon(iconEl, icon);
+		b.createSpan({ text });
 		b.addEventListener("click", callback);
 	}
-	section(root: HTMLElement, title: string, _icon: string): void { root.createEl("h2", { text: title, cls: "research-flow-section-title" }); }
+
+	section(root: HTMLElement, title: string, icon: string): void {
+		const heading = root.createDiv({ cls: "research-flow-section-header" });
+		const iconEl = heading.createSpan({ cls: "research-flow-section-icon" });
+		setIcon(iconEl, icon);
+		heading.createEl("h2", { text: title, cls: "research-flow-section-title" });
+	}
 	empty(root: HTMLElement, text: string): void { root.createDiv({ text, cls: "research-flow-empty" }); }
 
 	stats(root: HTMLElement, data: ResearchFlowData): void {
@@ -715,7 +782,7 @@ class ResearchFlowHomeView extends ItemView {
 		card.createDiv({ text: `${p.domain || "General"} · ${p.priority} · ${p.progress}%`, cls: "research-flow-project-meta" });
 		const bar = card.createDiv({ cls: "research-flow-progress" });
 		const fill = bar.createDiv({ cls: "research-flow-progress-fill" });
-		fill.style.width = `${p.progress}%`;
+		fill.setCssProps({ "--research-flow-progress": `${p.progress}%` });
 		if (p.nextAction) card.createDiv({ text: `Next: ${p.nextAction}`, cls: "research-flow-muted" });
 		if (p.deadline) card.createDiv({ text: `Deadline: ${formatDateForDisplay(p.deadline)}`, cls: "research-flow-muted" });
 		card.createDiv({ text: `Health: ${p.health}/100${p.stale ? " · stale" : ""}`, cls: p.health < 50 ? "research-flow-danger" : "research-flow-muted" });
@@ -777,27 +844,11 @@ class ResearchFlowHomeView extends ItemView {
 	}
 }
 
-/*class CreateItemModal extends Modal {
-	title: string;
-	onSubmit: (value: string) => Promise<void>;
-	constructor(app: App, title: string, onSubmit: (value: string) => Promise<void>) { super(app); this.title = title; this.onSubmit = onSubmit; }
-	onOpen(): void {
-		this.contentEl.empty(); this.contentEl.createEl("h2", { text: this.title });
-		const input = this.contentEl.createEl("input", { type: "text", placeholder: "Name" }); input.style.width = "100%";
-		const buttons = this.contentEl.createDiv();
-		buttons.createEl("button", { text: "Cancel" }).onclick = () => this.close();
-		buttons.createEl("button", { text: "Create", cls: "mod-cta" }).onclick = () => void this.submit(input.value);
-		input.focus();
-	}
-	async submit(value: string): Promise<void> { if (!value.trim()) { new Notice("Name cannot be empty."); return; } await this.onSubmit(value.trim()); this.close(); }
-	onClose(): void { this.contentEl.empty(); }
-}*/
-
 class CreateProjectModal extends Modal {
 	onSubmit: (name: string, domain: string, kind: string, priority: string, deadline: string) => Promise<void>;
 	constructor(app: App, onSubmit: (name: string, domain: string, kind: string, priority: string, deadline: string) => Promise<void>) { super(app); this.onSubmit = onSubmit; }
 	onOpen(): void {
-		this.contentEl.empty(); this.contentEl.createEl("h2", { text: "New Project" });
+		this.contentEl.empty(); new Setting(this.contentEl).setName("New Project").setHeading();
 		const name = inputField(this.contentEl, "Project name", "Astronomy Agent");
 		const domain = selectField(this.contentEl, "Domain", ["ML", "Quantum", "General"]);
 		const kind = selectField(this.contentEl, "Project type", ["Research", "Project"]);
@@ -813,7 +864,7 @@ class CreateIdeaModal extends Modal {
 	onSubmit: (name: string, domain: string, kind: string, priority: string) => Promise<void>;
 	constructor(app: App, onSubmit: (name: string, domain: string, kind: string, priority: string) => Promise<void>) { super(app); this.onSubmit = onSubmit; }
 	onOpen(): void {
-		this.contentEl.empty(); this.contentEl.createEl("h2", { text: "New Research Idea" });
+		this.contentEl.empty(); new Setting(this.contentEl).setName("New Research Idea").setHeading();
 		const name = inputField(this.contentEl, "Idea name", "Exclusive attention experiment");
 		const domain = selectField(this.contentEl, "Domain", ["ML", "Quantum", "General"]);
 		const kind = selectField(this.contentEl, "Idea type", ["Research", "Project"]);
@@ -828,7 +879,7 @@ class CreateTaskModal extends Modal {
 	onSubmit: (name: string, project: string, workDate: string, dueDate: string, priority: string) => Promise<void>;
 	constructor(app: App, projects: string[], onSubmit: (name: string, project: string, workDate: string, dueDate: string, priority: string) => Promise<void>) { super(app); this.projects = projects; this.onSubmit = onSubmit; }
 	onOpen(): void {
-		this.contentEl.empty(); this.contentEl.createEl("h2", { text: "New Task" });
+		this.contentEl.empty(); new Setting(this.contentEl).setName("New Task").setHeading();
 		const name = inputField(this.contentEl, "Task name", "Run baseline experiment");
 		const project = selectField(this.contentEl, "Project", ["", ...this.projects]);
 		const workDate = inputField(this.contentEl, "Work date", today(), "date");
@@ -843,7 +894,7 @@ class CreateReadingModal extends Modal {
 	projects: string[]; onSubmit: (name: string, url: string, type: string, project: string) => Promise<void>;
 	constructor(app: App, projects: string[], onSubmit: (name: string, url: string, type: string, project: string) => Promise<void>) { super(app); this.projects = projects; this.onSubmit = onSubmit; }
 	onOpen(): void {
-		this.contentEl.empty(); this.contentEl.createEl("h2", { text: "New Reading" });
+		this.contentEl.empty(); new Setting(this.contentEl).setName("New Reading").setHeading();
 		const name = inputField(this.contentEl, "Title", "Paper / article title");
 		const url = inputField(this.contentEl, "URL", "https://");
 		const type = selectField(this.contentEl, "Type", ["paper", "article", "book", "documentation", "video", "other"]);
@@ -857,7 +908,7 @@ class CreateCareerModal extends Modal {
 	projects: string[]; onSubmit: (company: string, role: string, deadline: string, match: string, project: string) => Promise<void>;
 	constructor(app: App, projects: string[], onSubmit: (company: string, role: string, deadline: string, match: string, project: string) => Promise<void>) { super(app); this.projects = projects; this.onSubmit = onSubmit; }
 	onOpen(): void {
-		this.contentEl.empty(); this.contentEl.createEl("h2", { text: "New Career Opportunity" });
+		this.contentEl.empty(); new Setting(this.contentEl).setName("New Career Opportunity").setHeading();
 		const company = inputField(this.contentEl, "Company", "Company");
 		const role = inputField(this.contentEl, "Role", "ML Researcher");
 		const deadline = inputField(this.contentEl, "Deadline", "", "date");
@@ -870,33 +921,90 @@ class CreateCareerModal extends Modal {
 
 class ResearchFlowSettingTab extends PluginSettingTab {
 	plugin: ResearchFlowPlugin;
-	constructor(app: App, plugin: ResearchFlowPlugin) { super(app, plugin); this.plugin = plugin; }
-	display(): void {
-		const { containerEl } = this; containerEl.empty(); containerEl.createEl("h2", { text: "ResearchFlow" });
-		containerEl.createEl("p", { text: `Version ${RF_VERSION}. Markdown-first research/project operating system.` });
-		for (const [key, name] of [
-			["projectsFolder", "Projects folder"], ["ideasFolder", "Ideas folder"], ["tasksFolder", "Tasks folder"],
-			["careerFolder", "Career folder"], ["readingFolder", "Reading folder"], ["dailyFolder", "Daily folder"],
-		] as Array<[keyof ResearchFlowSettings, string]>) {
-			new Setting(containerEl).setName(name).addText((text) => text.setValue(this.plugin.settings[key]).onChange(async (value) => { this.plugin.settings[key] = value.trim(); await this.plugin.saveSettings(); }));
-		}
+
+	constructor(app: App, plugin: ResearchFlowPlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	getSettingDefinitions(): SettingDefinitionItem<string>[] {
+		return [
+			{
+				name: "Projects folder",
+				desc: "Folder used for project pages.",
+				control: {
+					type: "text",
+					key: "projectsFolder",
+				},
+			},
+			{
+				name: "Ideas folder",
+				desc: "Folder used for research ideas.",
+				control: {
+					type: "text",
+					key: "ideasFolder",
+				},
+			},
+			{
+				name: "Tasks folder",
+				desc: "Folder used for detailed task pages.",
+				control: {
+					type: "text",
+					key: "tasksFolder",
+				},
+			},
+			{
+				name: "Career folder",
+				desc: "Folder used for career opportunities.",
+				control: {
+					type: "text",
+					key: "careerFolder",
+				},
+			},
+			{
+				name: "Reading folder",
+				desc: "Folder used for reading items.",
+				control: {
+					type: "text",
+					key: "readingFolder",
+				},
+			},
+			{
+				name: "Daily folder",
+				desc: "Folder used for daily work notes.",
+				control: {
+					type: "text",
+					key: "dailyFolder",
+				},
+			},
+		];
 	}
 }
 
 function inputField(parent: HTMLElement, label: string, placeholder: string, type = "text"): HTMLInputElement {
-	parent.createEl("label", { text: label });
-	const input = parent.createEl("input", { type, placeholder }); input.style.width = "100%"; return input;
+	const field = parent.createDiv({ cls: "research-flow-form-field" });
+	field.createEl("label", { text: label, cls: "research-flow-form-label" });
+	return field.createEl("input", {
+		type,
+		placeholder,
+		cls: "research-flow-form-control",
+	});
 }
+
 function selectField(parent: HTMLElement, label: string, values: string[]): HTMLSelectElement {
-	parent.createEl("label", { text: label });
-	const select = parent.createEl("select"); select.style.width = "100%";
-	for (const value of values) select.createEl("option", { value, text: value || "None" });
+	const field = parent.createDiv({ cls: "research-flow-form-field" });
+	field.createEl("label", { text: label, cls: "research-flow-form-label" });
+	const select = field.createEl("select", { cls: "research-flow-form-control" });
+	for (const value of values) {
+		select.createEl("option", { value, text: value || "None" });
+	}
 	return select;
 }
+
 function modalButtons(modal: Modal, parent: HTMLElement, submit: () => Promise<void>): void {
-	const row = parent.createDiv();
-	row.createEl("button", { text: "Cancel" }).onclick = () => modal.close();
-	row.createEl("button", { text: "Create", cls: "mod-cta" }).onclick = () => void submit();
+	const row = parent.createDiv({ cls: "research-flow-modal-buttons" });
+	row.createEl("button", { text: "Cancel" }).addEventListener("click", () => modal.close());
+	row.createEl("button", { text: "Create", cls: "mod-cta" }).addEventListener("click", () => void submit());
 }
 
 function frontmatterString(value: unknown): string | undefined {

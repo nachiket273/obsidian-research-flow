@@ -2,7 +2,9 @@
   "compilerOptions": {
     "baseUrl": "./",
     "paths": {
-      "*": ["node_modules/*"]
+      "*": [
+        "node_modules/*"
+      ]
     },
     "typeRoots": [
       "node_modules/@types",
@@ -19,6 +21,7 @@
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "moduleResolution": "bundler",
     "importHelpers": true,
     "downlevelIteration": true,
@@ -27,6 +30,6 @@
     "skipLibCheck": true
   },
   "include": [
-    "**/*.ts"
+    "src/**/*.ts"
   ]
 }

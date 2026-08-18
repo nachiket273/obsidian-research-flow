@@ -2,8 +2,8 @@
   "id": "research-flow",
   "name": "ResearchFlow",
   "version": "0.9.0",
-  "minAppVersion": "1.7.2",
-  "description": "A Markdown-first research and project operating system for Obsidian. Connect projects, tasks, daily work, ideas, reading, and career opportunities.",
+  "minAppVersion": "1.13.0",
+  "description": "A Markdown-first research and project operating system connecting ideas, projects, tasks, daily work, reading, and career opportunities.",
   "author": "Nachiket Tanksale",
   "authorUrl": "https://github.com/nachiket273",
   "isDesktopOnly": false
